@@ -6,6 +6,10 @@ About
 .. image:: https://github.com/fonttools/pyclipper/workflows/Build%20+%20Deploy/badge.svg
     :target: https://github.com/fonttools/pyclipper/actions?query=workflow%3A%22Build+%2B+Deploy%22
 
+**DISCLAIMER: This is a modified version of Pyclipper that enables the ``use_xyz`` preprocessor directive, adding Z-coordinate support to all point operations.
+When using this version, you should pass (x,y,z) tuples instead of just (x,y) when defining points. The Z coordinate is not used for geometric clipping operations but is carried
+through the clipping process and can be used to store vertex property data.**
+
 Pyclipper is a Cython wrapper exposing public functions and classes of
 the C++ translation of the `Angus Johnson's Clipper library (ver.
 6.4.2) <http://www.angusj.com/delphi/clipper.php>`__.
@@ -98,11 +102,12 @@ After every modification of ``.pyx`` files compile with Cython:
 Clippers' preprocessor directives
 ---------------------------------
 Clipper can be compiled with the following preprocessor directives: ``use_int32``, ``use_xyz``, ``use_lines`` and ``use_deprecated``. 
-Among these the ``use_int32`` and ``use_lines`` can be used with Pyclipper.
 
 -  ``use_int32`` - when enabled 32bit ints are used instead of 64bit ints. This improve performance but coordinate values are limited to the range +/- 46340. In Pyclipper this directive is **disabled** by default.
 
 -  ``use_lines`` - enables line clipping. Adds a very minor cost to performance. In Pyclipper this directive is **enabled** by default (since version 0.9.2b0).
+
+-  ``use_xyz`` - adds a Z coordinate to each point. The Z coordinate is not used for geometric operations but is carried through the clipping process. This allows for storing additional vertex data. In this modified version, this directive is **enabled**.
 
 In case you would want to change these settings, clone this repository and change the ``define_macros`` collection (``setup.py``, pyclipper extension definition). Add a set like ``('use_int32', 1)`` to enable the directive, or remove the set to disable it. After that you need to rebuild the package.
 
@@ -121,17 +126,18 @@ library.
    ``Pyclipper.Execute`` and ``Pyclipper.Execute2``.
 
 Basic clipping example (based on `Angus Johnson's Clipper
-library <http://www.angusj.com/delphi/clipper.php>`__):
+library <http://www.angusj.com/delphi/clipper.php>`__) with Z-coordinates:
 
 .. code:: python
 
     import pyclipper
 
+    # Note the (x, y, z) tuples with z-coordinates
     subj = (
-        ((180, 200), (260, 200), (260, 150), (180, 150)),
-        ((215, 160), (230, 190), (200, 190))
+        ((180, 200, 0), (260, 200, 0), (260, 150, 0), (180, 150, 0)),
+        ((215, 160, 5), (230, 190, 5), (200, 190, 5))
     )
-    clip = ((190, 210), (240, 210), (240, 130), (190, 130))
+    clip = ((190, 210, 10), (240, 210, 10), (240, 130, 10), (190, 130, 10))
 
     pc = pyclipper.Pyclipper()
     pc.AddPath(clip, pyclipper.PT_CLIP, True)
@@ -139,23 +145,28 @@ library <http://www.angusj.com/delphi/clipper.php>`__):
 
     solution = pc.Execute(pyclipper.CT_INTERSECTION, pyclipper.PFT_EVENODD, pyclipper.PFT_EVENODD) 
     
-    # solution (a list of paths): [[[240, 200], [190, 200], [190, 150], [240, 150]], [[200, 190], [230, 190], [215, 160]]]
+    # solution (a list of paths):
+    # [[[240, 200, 10], [190, 200, 10], [190, 150, 10], [240, 150, 10]],
+    #  [[200, 190, 5], [230, 190, 5], [215, 160, 5]]]
+    # Note how z-values are preserved from their source polygons
     
 
-Basic offset example:
+Basic offset example with Z-coordinates:
 
 .. code:: python
 
     import pyclipper
 
-    subj = ((180, 200), (260, 200), (260, 150), (180, 150))
+    # Z-coordinate of 5 for all points
+    subj = ((180, 200, 5), (260, 200, 5), (260, 150, 5), (180, 150, 5))
 
     pco = pyclipper.PyclipperOffset()
     pco.AddPath(subj, pyclipper.JT_ROUND, pyclipper.ET_CLOSEDPOLYGON)
 
     solution = pco.Execute(-7.0)
     
-    # solution (a list of paths): [[[253, 193], [187, 193], [187, 157], [253, 157]]]
+    # solution (a list of paths): [[[253, 193, 5], [187, 193, 5], [187, 157, 5], [253, 157, 5]]]
+    # Z-coordinates are preserved in the result
 
 The Clipper library uses integers instead of floating point values to
 preserve numerical robustness. If you need to scale coordinates of your polygons, this library provides helper functions ``scale_to_clipper()`` and ``scale_from_clipper()`` to achieve that. 

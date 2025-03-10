@@ -91,10 +91,11 @@ cdef extern from "clipper.hpp" namespace "ClipperLib":
 
     ctypedef char bool
 
-    # TODO: handle "use_xyz" that adds Z coordinate
+    # Handle "use_xyz" that adds Z coordinate
     cdef struct IntPoint:
         cInt X
         cInt Y
+        cInt Z  # Always include Z coordinate
 
     #typedef std::vector< IntPoint > Path;
     cdef cppclass Path:
@@ -924,7 +925,10 @@ cdef Path _to_clipper_path(object polygon):
 
 
 cdef IntPoint _to_clipper_point(object py_point):
-    return IntPoint(py_point[0], py_point[1])
+    # Require 3 coordinates (X, Y, Z)
+    if len(py_point) != 3:
+        raise ValueError("Points must have 3 coordinates [X, Y, Z]")
+    return IntPoint(py_point[0], py_point[1], py_point[2])
 
 
 cdef object _from_clipper_paths(Paths paths):
@@ -944,5 +948,6 @@ cdef object _from_clipper_path(Path path):
     cdef IntPoint point
     for i in xrange(path.size()):
         point = path[i]
-        poly.append([point.X, point.Y])
+        # Always include Z coordinate
+        poly.append([point.X, point.Y, point.Z])
     return poly

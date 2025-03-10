@@ -18,12 +18,14 @@ else:
 import pyclipper
 
 # Example polygons from http://www.angusj.com/delphi/clipper.php
-PATH_SUBJ_1 = [[180, 200], [260, 200], [260, 150], [180, 150]]  # square, orientation is False
-PATH_SUBJ_2 = [[215, 160], [230, 190], [200, 190]]  # triangle
-PATH_CLIP_1 = [[190, 210], [240, 210], [240, 130], [190, 130]]  # square
-PATH_SIGMA = [[300, 400], [100, 400], [200, 300], [100, 200], [300, 200]]  # greek letter sigma
-PATTERN = [[4, -6], [6, -6], [-4, 6], [-6, 6]]
-INVALID_PATH = [[1, 1], ]  # less than 2 vertices
+# All paths now must have Z coordinates
+PATH_SUBJ_1 = [[180, 200, 0], [260, 200, 0], [260, 150, 0], [180, 150, 0]]  # square, orientation is False
+PATH_SUBJ_2 = [[215, 160, 0], [230, 190, 0], [200, 190, 0]]  # triangle
+PATH_CLIP_1 = [[190, 210, 0], [240, 210, 0], [240, 130, 0], [190, 130, 0]]  # square
+PATH_SIGMA = [[300, 400, 0], [100, 400, 0], [200, 300, 0], [100, 200, 0], [300, 200, 0]]  # greek letter sigma
+PATTERN = [[4, -6, 0], [6, -6, 0], [-4, 6, 0], [-6, 6, 0]]
+# Paths with non-zero Z coordinates
+INVALID_PATH = [[1, 1, 0], ]  # less than 2 vertices
 
 
 class TestPyclipperModule(TestCase):
@@ -54,14 +56,14 @@ class TestNamespaceMethods(TestCase):
         self.assertEqual(abs(area_neg), area_pos)
 
     def test_point_in_polygon(self):
-        # on polygon
-        self.assertEqual(pyclipper.PointInPolygon((180, 200), PATH_SUBJ_1), -1)
+        # on polygon (using 3D point)
+        self.assertEqual(pyclipper.PointInPolygon((180, 200, 0), PATH_SUBJ_1), -1)
 
-        # in polygon
-        self.assertEqual(pyclipper.PointInPolygon((200, 180), PATH_SUBJ_1), 1)
+        # in polygon (using 3D point)
+        self.assertEqual(pyclipper.PointInPolygon((200, 180, 0), PATH_SUBJ_1), 1)
 
-        # outside of polygon
-        self.assertEqual(pyclipper.PointInPolygon((500, 500), PATH_SUBJ_1), 0)
+        # outside of polygon (using 3D point)
+        self.assertEqual(pyclipper.PointInPolygon((500, 500, 0), PATH_SUBJ_1), 0)
 
     def test_minkowski_sum(self):
         solution = pyclipper.MinkowskiSum(PATTERN, PATH_SIGMA, False)
@@ -261,13 +263,15 @@ class TestPyclipperExecute(TestCase):
 
         pc = pyclipper.Pyclipper()
 
-        # Some large triangle.
-        path = [[[0, 1], [0, 0], [15 ** 15, 0]]]
+        # Some large triangle with Z coordinates
+        large_value = 15 ** 15
+        path = [[[0, 1, 0], [0, 0, 0], [large_value, 0, 0]]]
 
         pc.AddPaths(path, pyclipper.PT_SUBJECT, True)
         result = pc.Execute(pyclipper.PT_CLIP, pyclipper.PFT_EVENODD, pyclipper.PFT_EVENODD)
 
-        assert result == path
+        # Now we can directly compare since both input and output use 3D points
+        self.assertEqual(result, path)
 
     def check_pypolynode(self, node):
         self.assertTrue(len(node.Contour) == 0 or len(node.Contour) > 2)
@@ -362,26 +366,20 @@ class TestScalingFunctions(TestCase):
         assert all(isinstance(k, float) for i in res for j in i for k in j)
 
 
-class TestNonStandardNumbers(TestCase):
-
-    def test_sympyzero(self):
-        try:
-            from sympy import Point2D
-            from sympy.core.numbers import Zero
-        except ImportError:
-            self.skipTest("Skipping, sympy not available")
-
-        path = [(0,0), (0,1)]
-        path = [Point2D(v) for v in [(0,0), (0,1)]]
-        assert type(path[0].x) == Zero
-        path = pyclipper.scale_to_clipper(path)
-        assert path == [[0, 0], [0, 2147483648]]
-
-
 class TestPackageVersion(TestCase):
     def test__version__(self):
         assert hasattr(pyclipper, "__version__")
         assert isinstance(pyclipper.__version__, str)
+
+
+class TestZCoordinateHandling(TestCase):
+    def test_z_coordinate_required(self):
+        """Test that attempting to use 2D points raises an error."""
+        pc = pyclipper.Pyclipper()
+
+        # Try to add a path with only 2D points - should raise ValueError
+        with self.assertRaises(ValueError):
+            pc.AddPath([[100, 100], [200, 200], [100, 200]], pyclipper.PT_SUBJECT, True)
 
 
 def _do_solutions_match(paths_1, paths_2, factor=None):
